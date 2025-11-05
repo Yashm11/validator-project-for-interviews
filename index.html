@@ -49,8 +49,48 @@
         if(m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
       }catch(e){}
       return url;
+
+      const SUBMIT_ENDPOINT = "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec"; // e.g. "https://script.google.com/macros/s/AKfycbx.../exec"
+
+    function buildPayload(){
+    const candidateName = (document.getElementById('candidateName')?.value||'').trim();
+    const consent = document.getElementById('consent')?.checked || false;
+    const video = document.getElementById('player')?.currentSrc || document.getElementById('videoUrl')?.value || '';
+    const referenceJsonUrl = document.getElementById('jsonUrl')?.value || '';
+    // "rules" is the array already built by your page
+    return { version:2, collectedAt:new Date().toISOString(), candidateName, consent, video, referenceJsonUrl, rules };
     }
-  </script>  
+
+    async function submitAll(){
+    const p = buildPayload();
+    if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
+    if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
+
+    if(SUBMIT_ENDPOINT){
+        try{
+        const res = await fetch(SUBMIT_ENDPOINT, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(p)
+        });
+        const txt = await res.text();
+        if(res.ok){ alert('Submitted! '+res.status); }
+        else { alert('Submission failed: '+res.status+'\n'+txt); }
+        }catch(err){ alert('Network error: '+err.message); }
+    } else {
+        // Fallback: download JSON so candidates can upload it to your form
+        const filename = 'validation_rules_'+(p.candidateName||'candidate').replace(/\s+/g,'_').toLowerCase()+'.json';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], {type:'application/json'}));
+        a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+        alert('Downloaded your JSON. Please upload/share this file.');
+    }
+    }
+
+    // Hook up the Submit button
+    (function(){ const btn = document.getElementById('btnSubmit'); if(btn) btn.addEventListener('click', submitAll); })();
+    }
+  </script>
 </head>
 <body>
   <header>
@@ -69,13 +109,13 @@
     <section class="card" style="margin-bottom:14px">
       <div class="grid g-2">
         <div>
+          <label>Full Name (required)</label>
+          <input id="candidateName" placeholder="Your full name" />
+        </div>
+        <div>
           <label>Paste video URL (mp4/webm)</label>
           <input id="videoUrl" value="https://drive.google.com/uc?export=download&id=1Cj_61SNXFT9QVaH70g0Lxl3mKGJJ7ivL" placeholder="https://drive.google.com/uc?export=download&id=1Cj_61SNXFT9QVaH70g0Lxl3mKGJJ7ivL" />
         </div>
-        <!-- <div>
-          <label>Or upload video file</label>
-          <input type="file" id="videoFile" accept="video/*" />
-        </div> -->
       </div>
       <div style="margin-top:12px">
         <video id="player" controls muted playsinline></video>
@@ -184,18 +224,23 @@
         </table>
       </div>
     </section>
+
     <section class="card" style="margin-bottom:14px">
       <div class="pill">Reference: Tracking JSON (read-only)</div>
-      <div class="small" style="margin:6px 0">
-        We preload a link and try to show a preview below. If blocked by CORS, open the link directly.
-      </div>
+      <div class="small" style="margin:6px 0">We preload a link and try to show a preview below. If blocked by CORS, open the link directly.</div>
       <div class="row">
         <input id="jsonUrl" value="https://drive.google.com/uc?export=download&id=1b5NBexLMn8K1_AtYq1G9O2StoOVACSwf" style="flex:1" />
         <button id="btnLoadJson" class="ghost">Load JSON</button>
         <a id="jsonOpen" class="ghost" href="https://drive.google.com/uc?export=download&id=1b5NBexLMn8K1_AtYq1G9O2StoOVACSwf" target="_blank">Open</a>
       </div>
       <pre id="jsonPreview"></pre>
-    </section>    
+    </section>
+
+    <div class="row" style="justify-content:flex-end;gap:10px">
+      <label class="small"><input type="checkbox" id="consent" /> I confirm these responses are my own.</label>
+      <button id="btnSubmit" style="background:#16a34a">Submit</button>
+    </div>
+
     <div class="small" style="margin-top:10px">
       Suggested themes to consider: counts (exact # players), duplicates, missed detections, ID persistence, max displacement between frames, ball uniqueness, goalkeeper count per team, referee count, bbox aspect ratio/size limits, boxes inside frame, occlusions, track start/end causes, re-ID switches, and interpolation gaps.
     </div>
@@ -204,6 +249,7 @@
   <script>
     const player = document.getElementById('player');
     const videoUrl = document.getElementById('videoUrl');
+
     function setVideoSrc(url){
       const src = normalizeDriveUrl(url);
       player.src = src;
@@ -215,28 +261,15 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      const qv = qs('video'); // allow ?video= override
+      const qv = qs('video');
       if(qv){ videoUrl.value = qv; setVideoSrc(qv); }
       else if(videoUrl.value){ setVideoSrc(videoUrl.value); }
     });
+
     videoUrl.addEventListener('change', () => {
       if (!videoUrl.value) return;
       setVideoSrc(videoUrl.value);
     });
-
-
-    // const videoFile = document.getElementById('videoFile');
-
-    // videoUrl.addEventListener('change', () => {
-    //   if (!videoUrl.value) return;
-    //   player.src = videoUrl.value;
-    //   player.load();
-    // });
-    const videoFile = document.getElementById('videoFile'); 
-    videoFile.addEventListener('change', (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
       player.src = url;
       player.load();
     });
@@ -344,27 +377,19 @@
       try{
         const res = await fetch(src);
         const text = await res.text();
-        try{
-          const obj = JSON.parse(text);
-          jsonPreview.textContent = JSON.stringify(obj, null, 2);
-        }catch{
-          jsonPreview.textContent = text.slice(0, 5000);
-        }
-      }catch(e){
-        if(jsonPreview) jsonPreview.textContent = 'Preview blocked by CORS or link is private. Use the Open link.';
-      }
+        try{ const obj = JSON.parse(text); jsonPreview.textContent = JSON.stringify(obj, null, 2); }
+        catch{ jsonPreview.textContent = text.slice(0, 5000); }
+      }catch(e){ if(jsonPreview) jsonPreview.textContent = 'Preview blocked by CORS or link is private. Use Open link.'; }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      // allow ?json= override
-      const qj = qs('json');
-      if(qj){ jsonUrlEl.value = qj; }
       if(jsonUrlEl && jsonUrlEl.value) loadJson(jsonUrlEl.value);
+      const qj = qs('json'); if(qj){ jsonUrlEl.value = qj; loadJson(qj); }
     });
 
-    document.getElementById('btnLoadJson').addEventListener('click', ()=>{
-      if(jsonUrlEl.value) loadJson(jsonUrlEl.value);
-    });
+    if(document.getElementById('btnLoadJson')){
+      document.getElementById('btnLoadJson').addEventListener('click', ()=>{ if(jsonUrlEl.value) loadJson(jsonUrlEl.value); });
+    }
 
     // Exports
     function download(filename, text){
