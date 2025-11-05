@@ -40,68 +40,11 @@
     .small{font-size:12px;color:#93a2bf}
     .right{margin-left:auto}
   </style>
-  <!-- <script>
-    function qs(k){ return new URLSearchParams(location.search).get(k); }
-    function normalizeDriveUrl(url){
-      if(!url) return url;
-      try{
-        const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
-        if(m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
-      }catch(e){}
-      return url;
-
-      const SUBMIT_ENDPOINT = "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec"; // e.g. "https://script.google.com/macros/s/AKfycbx.../exec"
-
-    function buildPayload(){
-    const candidateName = (document.getElementById('candidateName')?.value||'').trim();
-    const consent = document.getElementById('consent')?.checked || false;
-    const video = document.getElementById('player')?.currentSrc || document.getElementById('videoUrl')?.value || '';
-    const referenceJsonUrl = document.getElementById('jsonUrl')?.value || '';
-    // "rules" is the array already built by your page
-    return { version:2, collectedAt:new Date().toISOString(), candidateName, consent, video, referenceJsonUrl, rules };
-    }
-
-    async function submitAll(){
-    const p = buildPayload();
-    if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
-    if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
-
-    if(SUBMIT_ENDPOINT){
-        try{
-        const res = await fetch(SUBMIT_ENDPOINT, {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(p)
-        });
-        const txt = await res.text();
-        if(res.ok){ alert('Submitted! '+res.status); }
-        else { alert('Submission failed: '+res.status+'\n'+txt); }
-        }catch(err){ alert('Network error: '+err.message); }
-    } else {
-        // Fallback: download JSON so candidates can upload it to your form
-        const filename = 'validation_rules_'+(p.candidateName||'candidate').replace(/\s+/g,'_').toLowerCase()+'.json';
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], {type:'application/json'}));
-        a.download = filename; a.click(); URL.revokeObjectURL(a.href);
-        alert('Downloaded your JSON. Please upload/share this file.');
-    }
-    }
-
-    // Hook up the Submit button
-    (function(){ const btn = document.getElementById('btnSubmit'); if(btn) btn.addEventListener('click', submitAll); })();
-    }
-  </script> -->
   <script>
+    // tiny helpers
     function qs(k){ return new URLSearchParams(location.search).get(k); }
-    function normalizeDriveUrl(url){
-      if(!url) return url;
-      try{
-        const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
-        if(m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
-      }catch(e){}
-      return url;
-    }
-  </script>  
+    function escapeHtml(str=''){ return str.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  </script>
 </head>
 <body>
   <header>
@@ -113,9 +56,9 @@
       <button id="btnSample" class="ghost" title="Add example rule">+ Sample Rule</button>
       <button id="btnExportJson">Export JSON</button>
       <button id="btnExportCsv" class="alt">Export CSV</button>
-      
     </div>
   </header>
+
   <main>
     <section class="card" style="margin-bottom:14px">
       <div class="grid g-2">
@@ -125,12 +68,12 @@
         </div>
         <div>
           <label>Paste video URL (mp4/webm)</label>
-          <input id="videoUrl" value="https://drive.google.com/uc?export=download&id=1Cj_61SNXFT9QVaH70g0Lxl3mKGJJ7ivL" placeholder="https://drive.google.com/uc?export=download&id=1Cj_61SNXFT9QVaH70g0Lxl3mKGJJ7ivL" />
+          <input id="videoUrl" placeholder="https://yashm11.github.io/validator-project-for-interviews/assets/match_clip.mp4" />
         </div>
       </div>
       <div style="margin-top:12px">
-        <video id="player" controls muted playsinline></video>
-        <div class="footer">Tip: Host the video on a public link (e.g., cloud storage with public share) or attach the file; the app never uploads content anywhere.</div>
+        <video id="player" controls muted playsinline preload="auto"></video>
+        <div class="footer">Tip: host the video & JSON in this repo under <code>assets/</code> for zero-CORS issues.</div>
       </div>
     </section>
 
@@ -147,38 +90,27 @@
         <div>
           <label>Entity</label>
           <select id="entity">
-            <option>Player</option>
-            <option>Ball</option>
-            <option>Referee</option>
-            <option>Goalkeeper</option>
-            <option>Any</option>
-            <option>Global</option>
+            <option>Player</option><option>Ball</option><option>Referee</option>
+            <option>Goalkeeper</option><option>Any</option><option>Global</option>
           </select>
         </div>
         <div>
           <label>Scope</label>
           <select id="scope">
-            <option>Per-frame</option>
-            <option>Per-track</option>
-            <option>Per-clip</option>
+            <option>Per-frame</option><option>Per-track</option><option>Per-clip</option>
           </select>
         </div>
         <div>
           <label>Rule Type</label>
           <select id="ruleType">
-            <option>Count</option>
-            <option>Spatial</option>
-            <option>Temporal</option>
-            <option>Class/Logical</option>
-            <option>Quality/QC</option>
+            <option>Count</option><option>Spatial</option><option>Temporal</option>
+            <option>Class/Logical</option><option>Quality/QC</option>
           </select>
         </div>
         <div>
           <label>Severity</label>
           <select id="severity">
-            <option>Low (warn)</option>
-            <option>Medium</option>
-            <option>High (block)</option>
+            <option>Low (warn)</option><option>Medium</option><option>High (block)</option>
           </select>
         </div>
       </div>
@@ -205,7 +137,7 @@
         </div>
         <div>
           <label>Example / Rationale</label>
-          <textarea id="example" placeholder="E.g., If frame shows 23 players due to duplicates, flag as error. Use jersey color to differentiate teams."></textarea>
+          <textarea id="example" placeholder="E.g., 23 players due to duplicates → flag."></textarea>
         </div>
       </div>
     </section>
@@ -219,16 +151,8 @@
         <table>
           <thead>
             <tr>
-              <th>Entity</th>
-              <th>Scope</th>
-              <th>Type</th>
-              <th>Name</th>
-              <th>Description</th>
-              <th>Metric</th>
-              <th>Operator</th>
-              <th>Severity</th>
-              <th>Example</th>
-              <th>Actions</th>
+              <th>Entity</th><th>Scope</th><th>Type</th><th>Name</th><th>Description</th>
+              <th>Metric</th><th>Operator</th><th>Severity</th><th>Example</th><th>Actions</th>
             </tr>
           </thead>
           <tbody id="rulesBody"></tbody>
@@ -238,11 +162,11 @@
 
     <section class="card" style="margin-bottom:14px">
       <div class="pill">Reference: Tracking JSON (read-only)</div>
-      <div class="small" style="margin:6px 0">We preload a link and try to show a preview below. If blocked by CORS, open the link directly.</div>
+      <div class="small" style="margin:6px 0">We load from the same repo to avoid CORS. You can override with <code>?json=</code>.</div>
       <div class="row">
-        <input id="jsonUrl" value="https://drive.google.com/uc?export=download&id=1b5NBexLMn8K1_AtYq1G9O2StoOVACSwf" style="flex:1" />
+        <input id="jsonUrl" placeholder="https://yashm11.github.io/validator-project-for-interviews/assets/tracking_sample.json" style="flex:1" />
         <button id="btnLoadJson" class="ghost">Load JSON</button>
-        <a id="jsonOpen" class="ghost" href="https://drive.google.com/uc?export=download&id=1b5NBexLMn8K1_AtYq1G9O2StoOVACSwf" target="_blank">Open</a>
+        <a id="jsonOpen" class="ghost" href="#" target="_blank">Open</a>
       </div>
       <pre id="jsonPreview"></pre>
     </section>
@@ -253,38 +177,44 @@
     </div>
 
     <div class="small" style="margin-top:10px">
-      Suggested themes to consider: counts (exact # players), duplicates, missed detections, ID persistence, max displacement between frames, ball uniqueness, goalkeeper count per team, referee count, bbox aspect ratio/size limits, boxes inside frame, occlusions, track start/end causes, re-ID switches, and interpolation gaps.
+      Suggested themes: counts (exact # players), duplicates, missed detections, ID persistence, max displacement, ball uniqueness, GK per team, referee count, bbox size/aspect, boxes inside frame, occlusions, track start/end, re-ID switches, interpolation gaps.
     </div>
   </main>
 
   <script>
-    // ---- Config (Apps Script / webhook) ----
+    const REPO  = "validator-project-for-interviews";       
+    const VIDEO_FILE = "trackingvideo.mp4";                 
+    const JSON_FILE  = "trakingdata.json";              
     const SUBMIT_ENDPOINT = "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec";
-    // const NULL = None
-  
-    // ---- Elements ----
-    const player  = document.getElementById('player');
+
+    const BASE = `${location.origin}/${REPO}`;
+    const DEFAULT_VIDEO_URL = `${BASE}/assets/${VIDEO_FILE}`;
+    const DEFAULT_JSON_URL  = `${BASE}/assets/${JSON_FILE}`;
+
+    const player = document.getElementById('player');
     const videoUrl = document.getElementById('videoUrl');
     const jsonUrlEl = document.getElementById('jsonUrl');
     const jsonPreview = document.getElementById('jsonPreview');
     const jsonOpen = document.getElementById('jsonOpen');
-  
-    // ---- Video helpers ----
+
     function setVideoSrc(url){
-      const src = normalizeDriveUrl(url);
+      const src = url || DEFAULT_VIDEO_URL;
       player.src = src;
-      player.muted = true;   // allow autoplay
+      player.muted = true;
       player.autoplay = true;
       player.playsInline = true;
       player.load();
-      player.play().catch(()=>{});
+      // gentle retry for autoplay
+      const tryPlay = () => player.play().catch(()=> setTimeout(()=> player.play().catch(()=>{}), 300));
+      player.addEventListener('canplay', tryPlay, { once:true });
+      tryPlay();
     }
-  
-    // ---- JSON preview ----
+
+    // ---------- JSON preview ----------
     async function loadJson(url){
-      const src = normalizeDriveUrl(url);
+      const src = url || DEFAULT_JSON_URL;
       if(jsonOpen) jsonOpen.href = src;
-      if(jsonPreview) jsonPreview.textContent = 'Loading…';
+      jsonPreview.textContent = 'Loading…';
       try{
         const res = await fetch(src);
         const text = await res.text();
@@ -294,198 +224,116 @@
         }catch{
           jsonPreview.textContent = text.slice(0, 5000);
         }
-      }catch(e){
-        if(jsonPreview) jsonPreview.textContent = 'Preview blocked by CORS or the link is private. Use the Open link.';
+      }catch{
+        jsonPreview.textContent = 'Could not load JSON (check path).';
       }
     }
-  
-    // ---- Preload on start (supports ?video= & ?json=, else uses default values already in inputs) ----
+
+    // ---------- Init ----------
     document.addEventListener('DOMContentLoaded', () => {
-      const qv = qs('video');
+      // preload from query or defaults
+      const qv = qs('video'); const qj = qs('json');
+
       if(qv){ videoUrl.value = qv; setVideoSrc(qv); }
       else if(videoUrl.value){ setVideoSrc(videoUrl.value); }
-  
-      const qj = qs('json');
+      else { videoUrl.value = DEFAULT_VIDEO_URL; setVideoSrc(DEFAULT_VIDEO_URL); }
+
       if(qj){ jsonUrlEl.value = qj; }
-      if(jsonUrlEl && jsonUrlEl.value){ loadJson(jsonUrlEl.value); }
-  
-      const btnLoad = document.getElementById('btnLoadJson');
-      if(btnLoad){ btnLoad.addEventListener('click', ()=>{ if(jsonUrlEl.value) loadJson(jsonUrlEl.value); }); }
+      if(jsonUrlEl.value){ loadJson(jsonUrlEl.value); }
+      else { jsonUrlEl.value = DEFAULT_JSON_URL; loadJson(DEFAULT_JSON_URL); }
+
+      document.getElementById('btnLoadJson').addEventListener('click', ()=>{ if(jsonUrlEl.value) loadJson(jsonUrlEl.value); });
     });
-  
-    // ---- Video field change ----
-    videoUrl.addEventListener('change', () => {
-      if (!videoUrl.value) return;
-      setVideoSrc(videoUrl.value);
-    });
-  
-    // ---- Rules table logic (unchanged except we keep it running) ----
+
+    // field change
+    videoUrl.addEventListener('change', () => { if(videoUrl.value) setVideoSrc(videoUrl.value); });
+
+    // ---------- Rules table ----------
     const rules = [];
     const body = document.getElementById('rulesBody');
     const countLabel = document.getElementById('countLabel');
-  
+
     function uuid(){return 'r-' + Math.random().toString(36).slice(2,10)}
-  
     function readForm(){
       const get = id => document.getElementById(id).value.trim();
       return {
         id: uuid(),
-        entity: get('entity'),
-        scope: get('scope'),
-        type: get('ruleType'),
-        severity: get('severity'),
-        name: get('name'),
-        metric: get('metric'),
-        operator: get('op'),
-        desc: get('desc'),
-        example: get('example'),
-        video: player.currentSrc || videoUrl.value || '',
-        createdAt: new Date().toISOString(),
+        entity: get('entity'), scope: get('scope'), type: get('ruleType'), severity: get('severity'),
+        name: get('name'), metric: get('metric'), operator: get('op'), desc: get('desc'), example: get('example'),
+        video: player.currentSrc || videoUrl.value || '', createdAt: new Date().toISOString(),
       };
     }
-  
-    function addRule(rule){
-      rules.push(rule);
-      render();
-      clearForm();
-    }
-  
-    function clearForm(){
-      ['name','metric','op','desc','example'].forEach(id => document.getElementById(id).value = '');
-    }
-  
+    function addRule(rule){ rules.push(rule); render(); clearForm(); }
+    function clearForm(){ ['name','metric','op','desc','example'].forEach(id => document.getElementById(id).value = ''); }
     function render(){
       body.innerHTML = '';
-      for(const rule of rules){
+      for(const r of rules){
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escapeHtml(rule.entity)}</td>
-          <td>${escapeHtml(rule.scope)}</td>
-          <td>${escapeHtml(rule.type)}</td>
-          <td>${escapeHtml(rule.name)}</td>
-          <td>${escapeHtml(rule.desc)}</td>
-          <td>${escapeHtml(rule.metric)}</td>
-          <td>${escapeHtml(rule.operator)}</td>
-          <td>${sevBadge(rule.severity)}</td>
-          <td>${escapeHtml(rule.example)}</td>
-          <td>
-            <button class="ghost" onclick="editRule('${rule.id}')">Edit</button>
-            <button class="ghost" onclick="delRule('${rule.id}')">Delete</button>
-          </td>
-        `;
+          <td>${escapeHtml(r.entity)}</td><td>${escapeHtml(r.scope)}</td><td>${escapeHtml(r.type)}</td>
+          <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.desc)}</td>
+          <td>${escapeHtml(r.metric)}</td><td>${escapeHtml(r.operator)}</td>
+          <td><span class="badge ${r.severity?.startsWith('High')?'sev-high':r.severity?.startsWith('Medium')?'sev-med':'sev-low'}">${escapeHtml(r.severity||'')}</span></td>
+          <td>${escapeHtml(r.example)}</td>
+          <td><button class="ghost" onclick="editRule('${r.id}')">Edit</button> <button class="ghost" onclick="delRule('${r.id}')">Delete</button></td>`;
         body.appendChild(tr);
       }
       countLabel.textContent = `${rules.length} rule${rules.length!==1?'s':''}`;
     }
-  
     function editRule(id){
       const r = rules.find(x=>x.id===id); if(!r) return;
-      document.getElementById('entity').value = r.entity;
-      document.getElementById('scope').value = r.scope;
-      document.getElementById('ruleType').value = r.type;
-      document.getElementById('severity').value = r.severity;
-      document.getElementById('name').value = r.name;
-      document.getElementById('metric').value = r.metric;
-      document.getElementById('op').value = r.operator;
-      document.getElementById('desc').value = r.desc;
-      document.getElementById('example').value = r.example;
-      const i = rules.findIndex(x=>x.id===id);
-      if(i>-1) rules.splice(i,1);
-      render();
-      window.scrollTo({top:0, behavior:'smooth'});
+      ['entity','scope','ruleType','severity','name','metric','op','desc','example'].forEach(k => { const el = document.getElementById(k); if(el) el.value = r[k] || ''; });
+      const i = rules.findIndex(x=>x.id===id); if(i>-1) rules.splice(i,1);
+      render(); window.scrollTo({top:0, behavior:'smooth'});
     }
-  
-    function delRule(id){
-      const idx = rules.findIndex(r=>r.id===id);
-      if(idx>-1){ rules.splice(idx,1); render(); }
-    }
-  
-    function sevBadge(s){
-      const cls = s?.startsWith('High') ? 'sev-high' : s?.startsWith('Medium') ? 'sev-med' : 'sev-low';
-      return `<span class="badge ${cls}">${escapeHtml(s||'')}</span>`;
-    }
-  
-    function escapeHtml(str=''){
-      return str.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    }
-  
-    // ---- Export buttons ----
+    function delRule(id){ const i = rules.findIndex(x=>x.id===id); if(i>-1){ rules.splice(i,1); render(); } }
+
+    // ---------- Export ----------
     function download(filename, text){
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([text], {type:'text/plain'}));
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      a.download = filename; a.click(); URL.revokeObjectURL(a.href);
     }
-  
-    function exportJson(){
-      const payload = { version:1, collectedAt:new Date().toISOString(), video: player.currentSrc || videoUrl.value || '', rules };
-      download('validation_rules.json', JSON.stringify(payload, null, 2));
-    }
-  
+    function exportJson(){ const payload = { version:1, collectedAt:new Date().toISOString(), video: player.currentSrc || videoUrl.value || '', rules }; download('validation_rules.json', JSON.stringify(payload, null, 2)); }
     function exportCsv(){
       const headers = ['id','entity','scope','type','name','desc','metric','operator','severity','example','video','createdAt'];
       const rows = rules.map(r => headers.map(h => (r[h]??'').toString().replaceAll('"','""')));
-      const csv = [headers.join(','), ...rows.map(r=> '"'+r.join('","')+'"')].join('\n');
-      download('validation_rules.csv', csv);
+      const csv = [headers.join(','), ...rows.map(r=> '"'+r.join('","')+'"')].join('\n'); download('validation_rules.csv', csv);
     }
-  
-    // ---- Sample rule ----
-    function addSample(){
-      addRule({
-        id: uuid(), entity:'Player', scope:'Per-frame', type:'Count', severity:'High (block)',
-        name:'Exactly 22 player boxes per frame', metric:'num_boxes(Player)', operator:'== 22',
-        desc:'Each frame in full-11v11 gameplay should have 22 Player boxes (exclude refs/GKs if separate classes). Allow substitutions/stoppages as exceptions when visible.',
-        example:'23 → duplicate; 21 → missed unless off-screen exception.',
-        video: player.currentSrc || videoUrl.value || '', createdAt: new Date().toISOString()
-      });
-    }
-  
-    // ---- Submit to Apps Script (with name+consent) ----
+
+    // ---------- Submit (name + consent to Apps Script) ----------
     function buildPayload(){
       const candidateName = (document.getElementById('candidateName')?.value||'').trim();
       const consent = document.getElementById('consent')?.checked || false;
-      return {
-        version: 2,
-        collectedAt: new Date().toISOString(),
-        candidateName,
-        consent,
-        video: player.currentSrc || videoUrl.value || '',
-        referenceJsonUrl: jsonUrlEl?.value || '',
-        rules
-      };
+      return { version:2, collectedAt:new Date().toISOString(), candidateName, consent,
+        video: player.currentSrc || videoUrl.value || '', referenceJsonUrl: jsonUrlEl?.value || '', rules };
     }
-  
     async function submitAll(){
       const p = buildPayload();
       if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
       if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
-  
       if(SUBMIT_ENDPOINT){
         try{
           const res = await fetch(SUBMIT_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p) });
-          const txt = await res.text();
-          if(res.ok){ alert('Submitted! '+res.status); }
-          else { alert('Submission failed: '+res.status+'\n'+txt); }
+          const txt = await res.text(); if(res.ok){ alert('Submitted! '+res.status); } else { alert('Submission failed: '+res.status+'\n'+txt); }
         }catch(err){ alert('Network error: '+err.message); }
       } else {
         const filename = 'validation_rules_'+(p.candidateName||'candidate').replace(/\s+/g,'_').toLowerCase()+'.json';
-        download(filename, JSON.stringify(p, null, 2));
-        alert('Downloaded your JSON. Please upload this file.');
+        download(filename, JSON.stringify(p, null, 2)); alert('Downloaded your JSON. Please upload this file.');
       }
     }
-  
-    // ---- Wire up buttons ----
-    document.getElementById('btnAdd').addEventListener('click', ()=>{
-      const r = readForm();
-      if(!r.name){ alert('Please enter a Rule Name.'); return; }
-      addRule(r);
+
+    // ---------- Buttons ----------
+    document.getElementById('btnAdd').addEventListener('click', ()=>{ const r = readForm(); if(!r.name){ alert('Please enter a Rule Name.'); return; } addRule(r); });
+    document.getElementById('btnSample').addEventListener('click', ()=>{
+      addRule({ id: uuid(), entity:'Player', scope:'Per-frame', type:'Count', severity:'High (block)',
+        name:'Exactly 22 player boxes per frame', metric:'num_boxes(Player)', operator:'== 22',
+        desc:'11v11 should show 22 Player boxes; handle subs/stoppages explicitly.', example:'23 → duplicate; 21 → missed unless off-screen.',
+        video: player.currentSrc || videoUrl.value || '', createdAt: new Date().toISOString() });
     });
-    document.getElementById('btnSample').addEventListener('click', addSample);
     document.getElementById('btnExportJson').addEventListener('click', exportJson);
     document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
     document.getElementById('btnSubmit').addEventListener('click', submitAll);
   </script>
-  
 </body>
 </html>
