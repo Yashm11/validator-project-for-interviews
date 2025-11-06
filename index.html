@@ -161,15 +161,34 @@
     </section>
 
     <section class="card" style="margin-bottom:14px">
-      <div class="pill">Reference: Tracking JSON (read-only)</div>
-      <div class="small" style="margin:6px 0">We load from the same repo to avoid CORS. You can override with <code>?json=</code>.</div>
-      <div class="row">
-        <input id="jsonUrl" placeholder="https://yashm11.github.io/validator-project-for-interviews/assets/tracking_sample.json" style="flex:1" />
-        <button id="btnLoadJson" class="ghost">Load JSON</button>
-        <a id="jsonOpen" class="ghost" href="#" target="_blank">Open</a>
-      </div>
-      <pre id="jsonPreview"></pre>
+        <div class="pill">Reference: Tracking JSON (read-only)</div>
+        <div class="small" style="margin:6px 0">
+            We load this from your repository (<code>assets/tracking_sample.json</code>). Scroll to explore.
+            You can also open it in a new tab.
+        </div>
+        
+        <div class="row" style="align-items:center">
+            <input id="jsonUrl" style="flex:1" placeholder="https://yashm11.github.io/validator-project-for-interviews/assets/tracking_sample.json" />
+            <button id="btnLoadJson" class="ghost">Reload</button>
+            <a id="jsonOpen" class="ghost" href="#" target="_blank">Open</a>
+            <button id="toggleJson" class="ghost">Collapse</button>
+        </div>
+        
+        <pre id="jsonPreview" style="
+            margin-top:10px;
+            background:#0b1430;
+            color:#a5b4fc;
+            border:1px solid #27334e;
+            border-radius:10px;
+            padding:12px;
+            overflow:auto;
+            max-height:400px;  /* Adjust height as desired */
+            white-space:pre-wrap;
+            font-size:12px;
+            line-height:1.3em;
+        "></pre>
     </section>
+      
 
     <div class="row" style="justify-content:flex-end;gap:10px">
       <label class="small"><input type="checkbox" id="consent" /> I confirm these responses are my own.</label>
@@ -216,6 +235,11 @@
         jsonPreview.textContent = 'Loading…';
         try{
             const res = await fetch(src);
+            const MAX_LINES = 1000;
+            const lines = jsonPreview.textContent.split('\n');
+            if (lines.length > MAX_LINES) {
+            jsonPreview.textContent = lines.slice(0, MAX_LINES).join('\n') + `\n\n… truncated (${lines.length - MAX_LINES} more lines)`;
+            }
             const ct = (res.headers.get('content-type') || '').toLowerCase();
             const text = await res.text();
             if(!res.ok){
@@ -338,6 +362,43 @@
     document.getElementById('btnExportJson').addEventListener('click', exportJson);
     document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
     document.getElementById('btnSubmit').addEventListener('click', submitAll);
+
+    // // Toggle show/hide JSON preview
+    // const toggleBtn = document.getElementById('toggleJson');
+    // const jsonPreview = document.getElementById('jsonPreview');
+    // let jsonVisible = true;
+
+    // toggleBtn?.addEventListener('click', () => {
+    // jsonVisible = !jsonVisible;
+    // if (jsonVisible) {
+    //     jsonPreview.style.display = 'block';
+    //     toggleBtn.textContent = 'Collapse';
+    // } else {
+    //     jsonPreview.style.display = 'none';
+    //     toggleBtn.textContent = 'Expand';
+    // }
+    // });
+
+    // --- JSON collapse/expand toggle ---
+    const toggleBtn = document.getElementById('toggleJson');
+    let jsonVisible = true;
+
+    if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+        jsonVisible = !jsonVisible;
+        if (jsonVisible) {
+        jsonPreview.style.display = 'block';
+        toggleBtn.textContent = 'Collapse';
+        } else {
+        jsonPreview.style.display = 'none';
+        toggleBtn.textContent = 'Expand';
+        }
+    });
+    }
+
+
+
+
   </script>
 </body>
 </html>
