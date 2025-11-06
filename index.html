@@ -184,7 +184,7 @@
   <script>
     const REPO  = "validator-project-for-interviews";       
     const VIDEO_FILE = "trackingvideo.mp4";                 
-    const JSON_FILE  = "trakingdata.json";              
+    const JSON_FILE  = "trackingdata.json";              
     const SUBMIT_ENDPOINT = "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec";
 
     const BASE = `${location.origin}/${REPO}`;
@@ -210,24 +210,28 @@
       tryPlay();
     }
 
-    // ---------- JSON preview ----------
     async function loadJson(url){
-      const src = url || DEFAULT_JSON_URL;
-      if(jsonOpen) jsonOpen.href = src;
-      jsonPreview.textContent = 'Loading…';
-      try{
-        const res = await fetch(src);
-        const text = await res.text();
+        const src = url || DEFAULT_JSON_URL;
+        if(jsonOpen) jsonOpen.href = src;
+        jsonPreview.textContent = 'Loading…';
         try{
-          const obj = JSON.parse(text);
-          jsonPreview.textContent = JSON.stringify(obj, null, 2);
-        }catch{
-          jsonPreview.textContent = text.slice(0, 5000);
+            const res = await fetch(src);
+            const ct = (res.headers.get('content-type') || '').toLowerCase();
+            const text = await res.text();
+            if(!res.ok){
+            jsonPreview.textContent = `HTTP ${res.status}. Check the path: ${src}`;
+            return;
+            }
+            if(!ct.includes('application/json')){
+            jsonPreview.textContent = `This URL did not return JSON.\n\nURL: ${src}\nContent-Type: ${ct || 'unknown'}\n\nFirst 5000 chars:\n${text.slice(0,5000)}`;
+            return;
+            }
+            jsonPreview.textContent = JSON.stringify(JSON.parse(text), null, 2);
+        }catch(e){
+            jsonPreview.textContent = `Could not load JSON: ${e.message}\nURL: ${src}`;
         }
-      }catch{
-        jsonPreview.textContent = 'Could not load JSON (check path).';
-      }
     }
+
 
     // ---------- Init ----------
     document.addEventListener('DOMContentLoaded', () => {
