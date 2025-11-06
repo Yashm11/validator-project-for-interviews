@@ -204,7 +204,7 @@
     const REPO  = "validator-project-for-interviews";       
     const VIDEO_FILE = "trackingvideo.mp4";                 
     const JSON_FILE  = "trackingdata.json";              
-    const SUBMIT_ENDPOINT = "https://script.google.com/macros/library/d/1nkOZHXYKnhm8rgULbKOTcdqAAj426Ga1MCiTkkRbPepxUmifFNFhRqdh/4"
+    const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbyKkF9l9BtNU3AL1XLr41VMUZIn-hBnkHbXr3zKFPHVPzFgcXbNvz3c1NJUa_JbHELKtg/exec"
     // "https://script.google.com/macros/s/AKfycbyADnb5jSyng6ktmC7F0PwJhlOw-tT9yhaZ3x4UL6BKX74N7aPfHkWaLd5tniDMo0riTQ/exec";
     // "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec";
 
@@ -458,20 +458,57 @@
       return { version:2, collectedAt:new Date().toISOString(), candidateName, consent,
         video: player.currentSrc || videoUrl.value || '', referenceJsonUrl: jsonUrlEl?.value || '', rules };
     }
-    async function submitAll(){
-      const p = buildPayload();
-      if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
-      if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
-      if(SUBMIT_ENDPOINT){
-        try{
-          const res = await fetch(SUBMIT_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p) });
-          const txt = await res.text(); if(res.ok){ alert('Submitted! '+res.status); } else { alert('Submission failed: '+res.status+'\n'+txt); }
-        }catch(err){ alert('Network error: '+err.message); }
-      } else {
-        const filename = 'validation_rules_'+(p.candidateName||'candidate').replace(/\s+/g,'_').toLowerCase()+'.json';
-        download(filename, JSON.stringify(p, null, 2)); alert('Downloaded your JSON. Please upload this file.');
-      }
-    }
+    async function submitAllViaForm(){
+        const p = buildPayload();
+        if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
+        if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
+
+        // Create form
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = SUBMIT_ENDPOINT; // your Apps Script /macros/s/.../exec
+        form.target = 'submitFrame';
+        form.style.display = 'none';
+
+        // Option A: single 'payload' field containing serialized JSON
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'payload';
+        inp.value = JSON.stringify(p);
+        form.appendChild(inp);
+
+        // Option B (optional): also include named fields if you want server-side convenience
+        const fName = document.createElement('input');
+        fName.type = 'hidden'; fName.name = 'candidateName'; fName.value = p.candidateName; form.appendChild(fName);
+        const fConsent = document.createElement('input');
+        fConsent.type = 'hidden'; fConsent.name = 'consent'; fConsent.value = p.consent ? '1' : '0'; form.appendChild(fConsent);
+
+        document.body.appendChild(form);
+
+        // Add an onload handler to the iframe to detect completion (fires when response loads into iframe)
+        const iframe = document.getElementById('submitFrame');
+        const onload = () => {
+            // We cannot read cross-origin iframe response body, but iframe load means the request completed (200/302/...)
+            alert('Submission complete (iframe loaded). Please check the sheet in a moment.');
+            // cleanup
+            iframe.removeEventListener('load', onload);
+            document.body.removeChild(form);
+        };
+        iframe.addEventListener('load', onload);
+
+        // Submit
+        form.submit();
+
+        // As a fallback: set a timeout (e.g., 10s) to say "submitted" if iframe never loads (network issues)
+        setTimeout(() => {
+            try {
+            iframe.removeEventListener('load', onload);
+            } catch(e){}
+            alert('Submitted (timeout). If you don\'t see confirmation in the sheet, ask the candidate to download the JSON and share.');
+            try{ document.body.removeChild(form); }catch(e){}
+        }, 15000);
+        }
+
 
     // ---------- Buttons ----------
     document.getElementById('btnAdd').addEventListener('click', ()=>{ const r = readForm(); if(!r.name){ alert('Please enter a Rule Name.'); return; } addRule(r); });
@@ -484,6 +521,9 @@
     document.getElementById('btnExportJson').addEventListener('click', exportJson);
     document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
     document.getElementById('btnSubmit').addEventListener('click', submitAll);
+    document.getElementById('btnSubmit').removeEventListener('click', submitAll); // if previously bound
+    document.getElementById('btnSubmit').addEventListener('click', submitAllViaForm);
+
 
     // // Toggle show/hide JSON preview
     // const toggleBtn = document.getElementById('toggleJson');
@@ -522,5 +562,7 @@
 
 
   </script>
+  <!-- Hidden iframe used to POST to Apps Script without navigating away -->
+  <iframe id="submitFrame" name="submitFrame" style="display:none;"></iframe>
 </body>
 </html>
