@@ -201,13 +201,30 @@
   </main>
 
   <script>
-    const REPO  = "validator-project-for-interviews";       
-    const VIDEO_FILE = "trackingvideo.mp4";                 
-    const JSON_FILE  = "trackingdata.json";              
+    // Listen for messages from the iframe (Apps Script will postMessage)
+    window.addEventListener('message', (ev) => {
+      try {
+        const data = ev.data || {};
+        if (data && data.status === 'ok') {
+          alert('Submission received — thank you! Hoping to see you in for the next round!!');
+          const btn = document.getElementById('btnSubmit');
+          if (btn) { btn.disabled = true; btn.textContent = 'Submitted'; btn.style.opacity = 0.7; }
+        } else if (data && data.status === 'error') {
+          alert('Submission failed: ' + (data.message || 'unknown error'));
+          const btn = document.getElementById('btnSubmit');
+          if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = 1; }
+        }
+      } catch (e) {
+        console.warn('Message handler error', e);
+      }
+    });
+
+    const REPO  = "validator-project-for-interviews";
+    const VIDEO_FILE = "trackingvideo.mp4";
+    const JSON_FILE  = "trackingdata.json";
+
+    // IMPORTANT: replace with your Apps Script web app URL (deployed as "Execute as: Me" and "Anyone")
     const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbx8ry6KrjaD_BNipdY1FdgGcfxSyPRCrGL4zgQk_stHql3N6anaChYcZbD27Tty5YWj/exec";
-    // "https://script.google.com/macros/s/AKfycbyKkF9l9BtNU3AL1XLr41VMUZIn-hBnkHbXr3zKFPHVPzFgcXbNvz3c1NJUa_JbHELKtg/exec"
-    // "https://script.google.com/macros/s/AKfycbyADnb5jSyng6ktmC7F0PwJhlOw-tT9yhaZ3x4UL6BKX74N7aPfHkWaLd5tniDMo0riTQ/exec";
-    // "https://script.google.com/a/macros/hudl.com/s/AKfycbyk8HN4gztoL6doUR4bYG95-j9a2SXNS4CJFdghYMCNXt2inmons_HRPnM-EU1h5__jSQ/exec";
 
     const BASE = `${location.origin}/${REPO}`;
     const DEFAULT_VIDEO_URL = `${BASE}/assets/${VIDEO_FILE}`;
@@ -233,156 +250,139 @@
     }
 
     /**
- * Efficient JSON preview + lightweight summary
- * - Requests only the first N bytes using Range requests (if supported).
- * - Displays file size, a truncated preview, and a simple key-count summary.
- * - Falls back gracefully if Range not supported.
- */
-
+     * Efficient JSON preview + lightweight summary
+     * - Requests only the first N bytes using Range requests (if supported).
+     * - Displays file size, a truncated preview, and a simple key-count summary.
+     * - Falls back gracefully if Range not supported.
+     */
     async function loadJson(url){
-    const src = url || DEFAULT_JSON_URL;
-    if(jsonOpen) jsonOpen.href = src;
-    jsonPreview.textContent = 'Loading preview…';
+      const src = url || DEFAULT_JSON_URL;
+      if(jsonOpen) jsonOpen.href = src;
+      jsonPreview.textContent = 'Loading preview…';
 
-    // How many bytes to request for preview (200 KB)
-    const PREVIEW_BYTES = 200 * 1024;
+      // How many bytes to request for preview (200 KB)
+      const PREVIEW_BYTES = 200 * 1024;
 
-    try {
+      try {
         // 1) Try a HEAD request to get content-length (fast)
         let contentLength = null;
         try {
-        const headResp = await fetch(src, { method: 'HEAD' });
-        if (headResp.ok) {
+          const headResp = await fetch(src, { method: 'HEAD' });
+          if (headResp.ok) {
             const cl = headResp.headers.get('content-length');
             if (cl) contentLength = parseInt(cl, 10);
-        }
+          }
         } catch (e) {
-        // HEAD may be blocked — ignore and continue to range fetch
-        contentLength = null;
+          contentLength = null;
         }
 
         // 2) Try Range GET (only fetch first PREVIEW_BYTES)
         let text = '';
         let ranged = false;
         try {
-        const r = await fetch(src, {
+          const r = await fetch(src, {
             method: 'GET',
             headers: { 'Range': `bytes=0-${PREVIEW_BYTES - 1}` }
-        });
-        if (r.status === 206) {
-            // Server honored Range
+          });
+          if (r.status === 206) {
             ranged = true;
             text = await r.text();
-            // if content-length unknown, try reading content-range to infer total size
             const contentRange = r.headers.get('content-range'); // e.g. bytes 0-65535/3456789
             if (!contentLength && contentRange) {
-            const m = contentRange.match(/\/(\d+)$/);
-            if (m) contentLength = parseInt(m[1], 10);
+              const m = contentRange.match(/\/(\d+)$/);
+              if (m) contentLength = parseInt(m[1], 10);
             }
-        } else if (r.ok) {
-            // Server ignored Range and returned full content
+          } else if (r.ok) {
             text = await r.text();
-        } else {
+          } else {
             throw new Error(`HTTP ${r.status}`);
-        }
+          }
         } catch (e) {
-        // Range failed — fall back to full fetch
-        const r2 = await fetch(src);
-        if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
-        text = await r2.text();
+          // Range failed — fall back to full fetch
+          const r2 = await fetch(src);
+          if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+          text = await r2.text();
         }
 
         // 3) Determine content-type quickly (best-effort)
         let ct = '';
         try {
-        const probe = await fetch(src, { method: 'GET', headers: { 'Range': `bytes=0-0` } });
-        ct = (probe.headers.get('content-type') || '').toLowerCase();
+          const probe = await fetch(src, { method: 'GET', headers: { 'Range': `bytes=0-0` } });
+          ct = (probe.headers.get('content-type') || '').toLowerCase();
         } catch(e){
-        // ignore
-        ct = '';
+          ct = '';
         }
 
         // 4) If it doesn't look like JSON, show concise message and first chunk
         if (ct && !ct.includes('application/json') && !ct.includes('text')) {
-        jsonPreview.textContent = `Content-Type: ${ct || 'unknown'}. Showing first ${Math.min(text.length, 1000)} chars:\n\n` + text.slice(0, 1000);
+          jsonPreview.textContent = `Content-Type: ${ct || 'unknown'}. Showing first ${Math.min(text.length, 1000)} chars:\n\n` + text.slice(0, 1000);
         } else {
-        // 5) Clean up the preview text (we only show a portion)
-        // If the server gave us the whole file (no Range), show only first PREVIEW_BYTES chars
-        const preview = text.length > PREVIEW_BYTES ? text.slice(0, PREVIEW_BYTES) : text;
+          // 5) Clean up the preview text (we only show a portion)
+          const preview = text.length > PREVIEW_BYTES ? text.slice(0, PREVIEW_BYTES) : text;
 
-        // Attempt to pretty-print if small and valid JSON
-        // assume `preview` contains the truncated raw text read from the server
-        let pretty = null;
-        try {
-        // If the preview is valid JSON, pretty-print it
-        const parsed = JSON.parse(preview);
-        pretty = JSON.stringify(parsed, null, 2);
-        } catch (_) {
-        // Not valid JSON (probably partial). Use raw preview.
-        // BUT ensure we don't display HTML-escaped entities like &quot;
-        pretty = preview
-            .replace(/&quot;/g, '"')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
+          // Attempt to pretty-print if small and valid JSON
+          let pretty = null;
+          try {
+            const parsed = JSON.parse(preview);
+            pretty = JSON.stringify(parsed, null, 2);
+          } catch (_) {
+            // Not valid JSON (probably partial). Use raw preview and unescape common HTML entities
+            pretty = preview
+              .replace(/&quot;/g, '"')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>');
+          }
+
+          // Put content into <pre> using textContent so quotes are rendered directly
+          const MAX_PREVIEW = PREVIEW_BYTES;
+          let truncatedPretty = pretty;
+          if (pretty.length > MAX_PREVIEW) truncatedPretty = pretty.slice(0, MAX_PREVIEW) + '\n\n…truncated…';
+
+          // 6) Show summary stats based on the partial text:
+          const summary = generateJsonSummary(preview);
+
+          // 7) Compose header with size info
+          const sizeInfo = contentLength ? humanFileSize(contentLength) : (ranged ? `> ${humanFileSize(PREVIEW_BYTES)}` : `~${Math.min(text.length, PREVIEW_BYTES)} bytes`);
+          let moreNote = '';
+          if (contentLength && PREVIEW_BYTES < contentLength) moreNote = `\n\n(Preview: first ${humanFileSize(PREVIEW_BYTES)} of ${humanFileSize(contentLength)} — open/download for full file)`;
+          else if (!ranged && text.length > PREVIEW_BYTES) moreNote = `\n\n(Truncated preview — server returned full file but we show only ${humanFileSize(PREVIEW_BYTES)})`;
+
+          jsonPreview.textContent = `URL: ${src}\nSize: ${sizeInfo}${moreNote}\n\nSummary:\n${summary}\n\nPreview (first ${Math.min(PREVIEW_BYTES, preview.length)} chars):\n\n${truncatedPretty}`;
         }
-
-        // Put content into <pre> using textContent so quotes are rendered directly
-        jsonPreview.textContent = pretty.slice(0, PREVIEW_CHARS || 200 * 1024);
-
-
-        // 6) Show summary stats based on the partial text:
-        const summary = generateJsonSummary(preview);
-
-        // 7) Compose header with size info
-        const sizeInfo = contentLength ? humanFileSize(contentLength) : (ranged ? `> ${humanFileSize(PREVIEW_BYTES)}` : `~${Math.min(text.length, PREVIEW_BYTES)} bytes`);
-
-        let moreNote = '';
-        if (contentLength && PREVIEW_BYTES < contentLength) moreNote = `\n\n(Preview: first ${humanFileSize(PREVIEW_BYTES)} of ${humanFileSize(contentLength)} — open/download for full file)`;
-        else if (!ranged && text.length > PREVIEW_BYTES) moreNote = `\n\n(Truncated preview — server returned full file but we show only ${humanFileSize(PREVIEW_BYTES)})`;
-
-        jsonPreview.textContent = `URL: ${src}\nSize: ${sizeInfo}${moreNote}\n\nSummary:\n${summary}\n\nPreview (first ${Math.min(PREVIEW_BYTES, preview.length)} chars):\n\n${pretty}`;
-        }
-    } catch (err) {
+      } catch (err) {
         jsonPreview.textContent = `Could not load JSON: ${err.message}\nOpen the link to download the full file.`;
-    }
+      }
     }
 
     // Helper: human readable file size
     function humanFileSize(bytes) {
-    if (!bytes || isNaN(bytes)) return 'unknown';
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const sizes = ['B','KB','MB','GB','TB'];
-    return (bytes / Math.pow(1024, i)).toFixed(i?1:0) + ' ' + sizes[i];
+      if (!bytes || isNaN(bytes)) return 'unknown';
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      const sizes = ['B','KB','MB','GB','TB'];
+      return (bytes / Math.pow(1024, i)).toFixed(i?1:0) + ' ' + sizes[i];
     }
 
     // Generate a tiny summary from partial JSON text (counts occurrences of common keys)
-    // It's heuristic — works on partial data and avoids parsing full JSON.
     function generateJsonSummary(partialText){
-    // keys you might expect in tracking JSON — adjust to your schema
-    const keys = ['track_id','frame','bbox','x','y','player_id','class','id','timestamp','team'];
-    const counts = {};
-    for(const k of keys){
+      const keys = ['track_id','frame','bbox','x','y','player_id','class','id','timestamp','team'];
+      const counts = {};
+      for(const k of keys){
         const re = new RegExp(`"${k}"\\s*:`, 'g');
         const m = partialText.match(re);
         counts[k] = m ? m.length : 0;
-    }
-    // Also count approximate number of objects by counting '{' occurrence (very rough)
-    const approxObjects = (partialText.match(/\{/g) || []).length;
-    // Build summary string
-    let s = `Approx objects scanned: ${approxObjects}\n`;
-    for(const k of keys){
+      }
+      const approxObjects = (partialText.match(/\{/g) || []).length;
+      let s = `Approx objects scanned: ${approxObjects}\n`;
+      for(const k of keys){
         if(counts[k]) s += `• ${k}: ~${counts[k]}\n`;
+      }
+      if(s.trim() === `Approx objects scanned: 0`) s = 'No obvious keys found in preview.';
+      return s;
     }
-    if(s.trim() === `Approx objects scanned: 0`) s = 'No obvious keys found in preview.';
-    return s;
-    }
-
-
 
     // ---------- Init ----------
     document.addEventListener('DOMContentLoaded', () => {
-      // preload from query or defaults
       const qv = qs('video'); const qj = qs('json');
 
       if(qv){ videoUrl.value = qv; setVideoSrc(qv); }
@@ -459,57 +459,67 @@
       return { version:2, collectedAt:new Date().toISOString(), candidateName, consent,
         video: player.currentSrc || videoUrl.value || '', referenceJsonUrl: jsonUrlEl?.value || '', rules };
     }
+
     async function submitAllViaForm(){
-        const p = buildPayload();
-        if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
-        if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
+      const p = buildPayload();
+      if(!p.candidateName){ alert('Please enter your Full Name.'); return; }
+      if(!p.consent){ alert('Please confirm the consent checkbox.'); return; }
 
-        // Create form
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = SUBMIT_ENDPOINT; // your Apps Script /macros/s/.../exec
-        form.target = 'submitFrame';
-        form.style.display = 'none';
+      const btn = document.getElementById('btnSubmit');
+      if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; btn.style.opacity = 0.7; }
 
-        // Option A: single 'payload' field containing serialized JSON
-        const inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'payload';
-        inp.value = JSON.stringify(p);
-        form.appendChild(inp);
+      // Create form
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = SUBMIT_ENDPOINT;
+      form.target = 'submitFrame';
+      form.style.display = 'none';
 
-        // Option B (optional): also include named fields if you want server-side convenience
-        const fName = document.createElement('input');
-        fName.type = 'hidden'; fName.name = 'candidateName'; fName.value = p.candidateName; form.appendChild(fName);
-        const fConsent = document.createElement('input');
-        fConsent.type = 'hidden'; fConsent.name = 'consent'; fConsent.value = p.consent ? '1' : '0'; form.appendChild(fConsent);
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'payload'; inp.value = JSON.stringify(p); form.appendChild(inp);
 
-        document.body.appendChild(form);
+      // Add optional named fields
+      const fName = document.createElement('input'); fName.type='hidden'; fName.name='candidateName'; fName.value = p.candidateName; form.appendChild(fName);
+      const fConsent = document.createElement('input'); fConsent.type='hidden'; fConsent.name='consent'; fConsent.value = p.consent ? '1' : '0'; form.appendChild(fConsent);
 
-        // Add an onload handler to the iframe to detect completion (fires when response loads into iframe)
-        const iframe = document.getElementById('submitFrame');
-        const onload = () => {
-            // We cannot read cross-origin iframe response body, but iframe load means the request completed (200/302/...)
-            alert('Submission complete (iframe loaded). Please check the sheet in a moment.');
-            // cleanup
-            iframe.removeEventListener('load', onload);
-            document.body.removeChild(form);
-        };
-        iframe.addEventListener('load', onload);
+      document.body.appendChild(form);
 
-        // Submit
-        form.submit();
+      // Provide timeout fallback in case postMessage never arrives
+      let settled = false;
+      const cleanup = () => { try{ document.body.removeChild(form); }catch(e){} };
 
-        // As a fallback: set a timeout (e.g., 10s) to say "submitted" if iframe never loads (network issues)
-        setTimeout(() => {
-            try {
-            iframe.removeEventListener('load', onload);
-            } catch(e){}
-            alert('Submitted (timeout). If you don\'t see confirmation in the sheet, ask the candidate to download the JSON and share.');
-            try{ document.body.removeChild(form); }catch(e){}
-        }, 15000);
-        }
+      const fallback = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = 1; }
+        alert('Submission sent (no confirmation received). If you do not see the row in the sheet shortly, ask candidate to use JSON download as backup.');
+      }, 20000); // 20s fallback
 
+      // Temporary listener for the confirmation for this submission only
+      const onMessage = (ev) => {
+        try {
+          const data = ev.data || {};
+          if (data && (data.status === 'ok' || data.status === 'error')) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallback);
+            if (data.status === 'ok') {
+              alert('Submission received — thank you!');
+              if (btn) { btn.disabled = true; btn.textContent = 'Submitted'; btn.style.opacity = 0.7; }
+            } else {
+              alert('Submission failed: ' + (data.message || 'unknown error'));
+              if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = 1; }
+            }
+            cleanup();
+            window.removeEventListener('message', onMessage);
+          }
+        } catch(e){ console.warn(e); }
+      };
+      window.addEventListener('message', onMessage);
+
+      form.submit();
+    }
 
     // ---------- Buttons ----------
     document.getElementById('btnAdd').addEventListener('click', ()=>{ const r = readForm(); if(!r.name){ alert('Please enter a Rule Name.'); return; } addRule(r); });
@@ -521,48 +531,31 @@
     });
     document.getElementById('btnExportJson').addEventListener('click', exportJson);
     document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
-    document.getElementById('btnSubmit').addEventListener('click', submitAll);
-    document.getElementById('btnSubmit').removeEventListener('click', submitAll); // if previously bound
-    document.getElementById('btnSubmit').addEventListener('click', submitAllViaForm);
 
-
-    // // Toggle show/hide JSON preview
-    // const toggleBtn = document.getElementById('toggleJson');
-    // const jsonPreview = document.getElementById('jsonPreview');
-    // let jsonVisible = true;
-
-    // toggleBtn?.addEventListener('click', () => {
-    // jsonVisible = !jsonVisible;
-    // if (jsonVisible) {
-    //     jsonPreview.style.display = 'block';
-    //     toggleBtn.textContent = 'Collapse';
-    // } else {
-    //     jsonPreview.style.display = 'none';
-    //     toggleBtn.textContent = 'Expand';
-    // }
-    // });
+    // Bind only the form-based submit
+    const btnSubmit = document.getElementById('btnSubmit');
+    if (btnSubmit) {
+      btnSubmit.addEventListener('click', submitAllViaForm);
+    }
 
     // --- JSON collapse/expand toggle ---
     const toggleBtn = document.getElementById('toggleJson');
     let jsonVisible = true;
-
     if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
+      toggleBtn.addEventListener('click', () => {
         jsonVisible = !jsonVisible;
         if (jsonVisible) {
-        jsonPreview.style.display = 'block';
-        toggleBtn.textContent = 'Collapse';
+          jsonPreview.style.display = 'block';
+          toggleBtn.textContent = 'Collapse';
         } else {
-        jsonPreview.style.display = 'none';
-        toggleBtn.textContent = 'Expand';
+          jsonPreview.style.display = 'none';
+          toggleBtn.textContent = 'Expand';
         }
-    });
+      });
     }
 
-
-
-
   </script>
+
   <!-- Hidden iframe used to POST to Apps Script without navigating away -->
   <iframe id="submitFrame" name="submitFrame" style="display:none;"></iframe>
 </body>
