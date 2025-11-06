@@ -229,32 +229,141 @@
       tryPlay();
     }
 
+    /**
+ * Efficient JSON preview + lightweight summary
+ * - Requests only the first N bytes using Range requests (if supported).
+ * - Displays file size, a truncated preview, and a simple key-count summary.
+ * - Falls back gracefully if Range not supported.
+ */
+
     async function loadJson(url){
-        const src = url || DEFAULT_JSON_URL;
-        if(jsonOpen) jsonOpen.href = src;
-        jsonPreview.textContent = 'Loading…';
-        try{
-            const res = await fetch(src);
-            const MAX_LINES = 1000;
-            const lines = jsonPreview.textContent.split('\n');
-            if (lines.length > MAX_LINES) {
-            jsonPreview.textContent = lines.slice(0, MAX_LINES).join('\n') + `\n\n… truncated (${lines.length - MAX_LINES} more lines)`;
-            }
-            const ct = (res.headers.get('content-type') || '').toLowerCase();
-            const text = await res.text();
-            if(!res.ok){
-            jsonPreview.textContent = `HTTP ${res.status}. Check the path: ${src}`;
-            return;
-            }
-            if(!ct.includes('application/json')){
-            jsonPreview.textContent = `This URL did not return JSON.\n\nURL: ${src}\nContent-Type: ${ct || 'unknown'}\n\nFirst 5000 chars:\n${text.slice(0,5000)}`;
-            return;
-            }
-            jsonPreview.textContent = JSON.stringify(JSON.parse(text), null, 2);
-        }catch(e){
-            jsonPreview.textContent = `Could not load JSON: ${e.message}\nURL: ${src}`;
+    const src = url || DEFAULT_JSON_URL;
+    if(jsonOpen) jsonOpen.href = src;
+    jsonPreview.textContent = 'Loading preview…';
+
+    // How many bytes to request for preview (200 KB)
+    const PREVIEW_BYTES = 200 * 1024;
+
+    try {
+        // 1) Try a HEAD request to get content-length (fast)
+        let contentLength = null;
+        try {
+        const headResp = await fetch(src, { method: 'HEAD' });
+        if (headResp.ok) {
+            const cl = headResp.headers.get('content-length');
+            if (cl) contentLength = parseInt(cl, 10);
         }
+        } catch (e) {
+        // HEAD may be blocked — ignore and continue to range fetch
+        contentLength = null;
+        }
+
+        // 2) Try Range GET (only fetch first PREVIEW_BYTES)
+        let text = '';
+        let ranged = false;
+        try {
+        const r = await fetch(src, {
+            method: 'GET',
+            headers: { 'Range': `bytes=0-${PREVIEW_BYTES - 1}` }
+        });
+        if (r.status === 206) {
+            // Server honored Range
+            ranged = true;
+            text = await r.text();
+            // if content-length unknown, try reading content-range to infer total size
+            const contentRange = r.headers.get('content-range'); // e.g. bytes 0-65535/3456789
+            if (!contentLength && contentRange) {
+            const m = contentRange.match(/\/(\d+)$/);
+            if (m) contentLength = parseInt(m[1], 10);
+            }
+        } else if (r.ok) {
+            // Server ignored Range and returned full content
+            text = await r.text();
+        } else {
+            throw new Error(`HTTP ${r.status}`);
+        }
+        } catch (e) {
+        // Range failed — fall back to full fetch
+        const r2 = await fetch(src);
+        if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+        text = await r2.text();
+        }
+
+        // 3) Determine content-type quickly (best-effort)
+        let ct = '';
+        try {
+        const probe = await fetch(src, { method: 'GET', headers: { 'Range': `bytes=0-0` } });
+        ct = (probe.headers.get('content-type') || '').toLowerCase();
+        } catch(e){
+        // ignore
+        ct = '';
+        }
+
+        // 4) If it doesn't look like JSON, show concise message and first chunk
+        if (ct && !ct.includes('application/json') && !ct.includes('text')) {
+        jsonPreview.textContent = `Content-Type: ${ct || 'unknown'}. Showing first ${Math.min(text.length, 1000)} chars:\n\n` + text.slice(0, 1000);
+        } else {
+        // 5) Clean up the preview text (we only show a portion)
+        // If the server gave us the whole file (no Range), show only first PREVIEW_BYTES chars
+        const preview = text.length > PREVIEW_BYTES ? text.slice(0, PREVIEW_BYTES) : text;
+
+        // Attempt to pretty-print if small and valid JSON
+        let pretty = null;
+        try {
+            const parsed = JSON.parse(preview + (ranged ? '}' : '')); // don't rely on this; main aim is preview
+            pretty = JSON.stringify(parsed, null, 2).slice(0, PREVIEW_BYTES);
+        } catch(_) {
+            // Not parseable (likely partial JSON). Show raw truncated text but escape HTML.
+            pretty = escapeHtml(preview);
+        }
+
+        // 6) Show summary stats based on the partial text:
+        const summary = generateJsonSummary(preview);
+
+        // 7) Compose header with size info
+        const sizeInfo = contentLength ? humanFileSize(contentLength) : (ranged ? `> ${humanFileSize(PREVIEW_BYTES)}` : `~${Math.min(text.length, PREVIEW_BYTES)} bytes`);
+
+        let moreNote = '';
+        if (contentLength && PREVIEW_BYTES < contentLength) moreNote = `\n\n(Preview: first ${humanFileSize(PREVIEW_BYTES)} of ${humanFileSize(contentLength)} — open/download for full file)`;
+        else if (!ranged && text.length > PREVIEW_BYTES) moreNote = `\n\n(Truncated preview — server returned full file but we show only ${humanFileSize(PREVIEW_BYTES)})`;
+
+        jsonPreview.textContent = `URL: ${src}\nSize: ${sizeInfo}${moreNote}\n\nSummary:\n${summary}\n\nPreview (first ${Math.min(PREVIEW_BYTES, preview.length)} chars):\n\n${pretty}`;
+        }
+    } catch (err) {
+        jsonPreview.textContent = `Could not load JSON: ${err.message}\nOpen the link to download the full file.`;
     }
+    }
+
+    // Helper: human readable file size
+    function humanFileSize(bytes) {
+    if (!bytes || isNaN(bytes)) return 'unknown';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const sizes = ['B','KB','MB','GB','TB'];
+    return (bytes / Math.pow(1024, i)).toFixed(i?1:0) + ' ' + sizes[i];
+    }
+
+    // Generate a tiny summary from partial JSON text (counts occurrences of common keys)
+    // It's heuristic — works on partial data and avoids parsing full JSON.
+    function generateJsonSummary(partialText){
+    // keys you might expect in tracking JSON — adjust to your schema
+    const keys = ['track_id','frame','bbox','x','y','player_id','class','id','timestamp','team'];
+    const counts = {};
+    for(const k of keys){
+        const re = new RegExp(`"${k}"\\s*:`, 'g');
+        const m = partialText.match(re);
+        counts[k] = m ? m.length : 0;
+    }
+    // Also count approximate number of objects by counting '{' occurrence (very rough)
+    const approxObjects = (partialText.match(/\{/g) || []).length;
+    // Build summary string
+    let s = `Approx objects scanned: ${approxObjects}\n`;
+    for(const k of keys){
+        if(counts[k]) s += `• ${k}: ~${counts[k]}\n`;
+    }
+    if(s.trim() === `Approx objects scanned: 0`) s = 'No obvious keys found in preview.';
+    return s;
+    }
+
 
 
     // ---------- Init ----------
