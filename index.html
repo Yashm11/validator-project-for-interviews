@@ -308,14 +308,25 @@
         const preview = text.length > PREVIEW_BYTES ? text.slice(0, PREVIEW_BYTES) : text;
 
         // Attempt to pretty-print if small and valid JSON
+        // assume `preview` contains the truncated raw text read from the server
         let pretty = null;
         try {
-            const parsed = JSON.parse(preview + (ranged ? '}' : '')); // don't rely on this; main aim is preview
-            pretty = JSON.stringify(parsed, null, 2).slice(0, PREVIEW_BYTES);
-        } catch(_) {
-            // Not parseable (likely partial JSON). Show raw truncated text but escape HTML.
-            pretty = escapeHtml(preview);
+        // If the preview is valid JSON, pretty-print it
+        const parsed = JSON.parse(preview);
+        pretty = JSON.stringify(parsed, null, 2);
+        } catch (_) {
+        // Not valid JSON (probably partial). Use raw preview.
+        // BUT ensure we don't display HTML-escaped entities like &quot;
+        pretty = preview
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>');
         }
+
+        // Put content into <pre> using textContent so quotes are rendered directly
+        jsonPreview.textContent = pretty.slice(0, PREVIEW_CHARS || 200 * 1024);
+
 
         // 6) Show summary stats based on the partial text:
         const summary = generateJsonSummary(preview);
