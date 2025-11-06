@@ -224,7 +224,8 @@
     const JSON_FILE  = "trackingdata.json";
 
     // IMPORTANT: replace with your Apps Script web app URL (deployed as "Execute as: Me" and "Anyone")
-    const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbx8ry6KrjaD_BNipdY1FdgGcfxSyPRCrGL4zgQk_stHql3N6anaChYcZbD27Tty5YWj/exec";
+    const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbzaLVR5o6BZnpX8alc37_zSTsKCuMmY5YcuG3M4RkBXsEzNoWO69w4n8AzXNErEwN3suQ/exec";
+    // "https://script.google.com/macros/s/AKfycbx8ry6KrjaD_BNipdY1FdgGcfxSyPRCrGL4zgQk_stHql3N6anaChYcZbD27Tty5YWj/exec";
 
     const BASE = `${location.origin}/${REPO}`;
     const DEFAULT_VIDEO_URL = `${BASE}/assets/${VIDEO_FILE}`;
@@ -493,7 +494,7 @@
         settled = true;
         cleanup();
         if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = 1; }
-        alert('Submission sent (no confirmation received). If you do not see the row in the sheet shortly, ask candidate to use JSON download as backup.');
+        alert('Submission sent; Hope to see you in the next round.');
       }, 20000); // 20s fallback
 
       // Temporary listener for the confirmation for this submission only
